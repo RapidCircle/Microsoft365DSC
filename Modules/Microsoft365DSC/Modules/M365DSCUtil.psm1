@@ -5,7 +5,7 @@ $Global:SessionSecurityCompliance = $null
 
 #region Extraction Modes
 $Global:DefaultComponents = @("SPOApp", "SPOSiteDesign")
-$Global:FullComponents = @("AADMSGroup", "EXOMailboxSettings", "EXOManagementRole", "O365Group", "O365User", `
+$Global:FullComponents = @("AADMSGroup", "AADServicePrincipal", "EXOMailboxSettings", "EXOManagementRole", "O365Group", "O365User", `
         "PlannerPlan", "PlannerBucket", "PlannerTask", "PPPowerAppsEnvironment", `
         "SPOSiteAuditSettings", "SPOSiteGroup", "SPOSite", "SPOUserProfileProperty", "SPOPropertyBag", "TeamsTeam", "TeamsChannel", `
         "TeamsUser")
@@ -410,7 +410,7 @@ function Compare-PSCustomObjectArrays
     return $DriftedProperties
 }
 
-function Test-Microsoft365DSCParameterState
+function Test-M365DSCParameterState
 {
     [CmdletBinding()]
     [OutputType([System.Boolean])]
@@ -445,7 +445,7 @@ function Test-Microsoft365DSCParameterState
             -and ($DesiredValues.GetType().Name -ne "CimInstance") `
             -and ($DesiredValues.GetType().Name -ne "PSBoundParametersDictionary"))
     {
-        throw ("Property 'DesiredValues' in Test-Microsoft365DSCParameterState must be either a " + `
+        throw ("Property 'DesiredValues' in Test-M365DSCParameterState must be either a " + `
                 "Hashtable or CimInstance. Type detected was $($DesiredValues.GetType().Name)")
     }
 
@@ -711,7 +711,7 @@ function Test-Microsoft365DSCParameterState
                                 Write-Verbose -Message ("Unable to compare property $fieldName " + `
                                         "as the type ($($desiredType.Name)) is " + `
                                         "not handled by the " + `
-                                        "Test-Microsoft365DSCParameterState cmdlet")
+                                        "Test-M365DSCParameterState cmdlet")
                                 $EventValue = "<CurrentValue>$($CurrentValues.$fieldName)</CurrentValue>"
                                 $EventValue += "<DesiredValue>$($DesiredValues.$fieldName)</DesiredValue>"
                                 $DriftedParameters.Add($fieldName, $EventValue)
@@ -760,7 +760,8 @@ function Test-Microsoft365DSCParameterState
         $EventMessage += "    </DesiredValues>`r`n"
         $EventMessage += "</M365DSCEvent>"
 
-        Add-M365DSCEvent -Message $EventMessage -EntryType 'Error' -EventID 1 -Source $Source
+        Add-M365DSCEvent -Message $EventMessage -EntryType 'Warning' `
+            -EventID 1 -Source $Source
     }
     #region Telemetry
     Add-M365DSCTelemetryEvent -Data $data
@@ -795,7 +796,7 @@ function Export-M365DSCConfiguration
         $ComponentsToExtract,
 
         [Parameter()]
-        [ValidateSet('AAD', 'SPO', 'EXO', 'SC', 'OD', 'O365', 'PLANNER', 'PP', 'TEAMS')]
+        [ValidateSet('AAD', 'SPO', 'EXO', 'INTUNE', 'SC', 'OD', 'O365', 'PLANNER', 'PP', 'TEAMS')]
         [System.String[]]
         $Workloads,
 
@@ -819,10 +820,6 @@ function Export-M365DSCConfiguration
         [Parameter()]
         [System.String]
         $TenantId,
-
-        [Parameter()]
-        [System.string]
-        $ApplicationSecret,
 
         [Parameter()]
         [System.String]
@@ -877,7 +874,6 @@ function Export-M365DSCConfiguration
                 -ConfigurationName $ConfigurationName `
                 -ApplicationId $ApplicationId `
                 -TenantId $TenantId `
-                -ApplicationSecret $ApplicationSecret `
                 -CertificateThumbprint $CertificateThumbprint `
                 -CertificatePath $CertificatePath `
                 -CertificatePassword $CertificatePassword `
@@ -893,7 +889,6 @@ function Export-M365DSCConfiguration
                 -ConfigurationName $ConfigurationName `
                 -ApplicationId $ApplicationId `
                 -TenantId $TenantId `
-                -ApplicationSecret $ApplicationSecret `
                 -CertificateThumbprint $CertificateThumbprint `
                 -CertificatePath $CertificatePath `
                 -CertificatePassword $CertificatePassword `
@@ -909,7 +904,6 @@ function Export-M365DSCConfiguration
                 -ConfigurationName $ConfigurationName `
                 -ApplicationId $ApplicationId `
                 -TenantId $TenantId `
-                -ApplicationSecret $ApplicationSecret `
                 -CertificateThumbprint $CertificateThumbprint `
                 -CertificatePath $CertificatePath `
                 -CertificatePassword $CertificatePassword `
@@ -993,7 +987,7 @@ function New-M365DSCConnection
 {
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet("Azure", "AzureAD", "ExchangeOnline", `
+        [ValidateSet("Azure", "AzureAD", "ExchangeOnline", "Intune", `
                 "SecurityComplianceCenter", "PnP", "PowerPlatforms", `
                 "MicrosoftTeams", "SkypeForBusiness", "MicrosoftGraph")]
         [System.String]
@@ -1412,7 +1406,7 @@ function Install-M365DSCDevBranch
 
     #region Install M365DSC
     $defaultPath = 'C:\Program Files\WindowsPowerShell\Modules\Microsoft365DSC\'
-    $currentVersionPath = $defaultPath + $($manifest.ModuleVersion)
+    $currentVersionPath = $defaultPath + ([Version]$($manifest.ModuleVersion)).ToString()
     if (Test-Path $currentVersionPath)
     {
         Remove-Item $currentVersionPath -Recurse -Confirm:$false
@@ -1607,7 +1601,11 @@ function Assert-M365DSCBlueprint
 
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.PSCredential]
-        $Credentials
+        $Credentials,
+
+        [Parameter()]
+        [System.String]
+        $HeaderFilePath
     )
     $InformationPreference = 'SilentlyContinue'
     $WarningPreference = 'SilentlyContinue'
@@ -1673,7 +1671,8 @@ function Assert-M365DSCBlueprint
             -Destination $LocalBluePrintPath `
             -OutputPath $OutputReportPath `
             -DriftOnly:$true `
-            -IsBlueprintAssessment:$true
+            -IsBlueprintAssessment:$true `
+            -HeaderFilePath $HeaderFilePath
     }
     else
     {
@@ -1706,6 +1705,29 @@ function Test-M365DSCDependenciesForNewVersions
         catch
         {
             Write-Information -MessageData "New version of {$($dependency.ModuleName)} is available"
+        }
+        $i++
+    }
+}
+
+function Update-M365DSCDependencies
+{
+    [CmdletBinding()]
+    $InformationPreference = 'Continue'
+    $currentPath = Join-Path -Path $PSScriptRoot -ChildPath '..\' -Resolve
+    $manifest = Import-PowerShellDataFile "$currentPath/Microsoft365DSC.psd1"
+    $dependencies = $manifest.RequiredModules
+    $i = 1
+    foreach ($dependency in $dependencies)
+    {
+        Write-Progress -Activity "Scanning Dependencies" -PercentComplete ($i / $dependencies.Count * 100)
+        try
+        {
+            Install-Module $dependency.ModuleName -RequiredVersion $dependency.RequiredVersion -Force
+        }
+        catch
+        {
+            Write-Information -MessageData "Could not update {$($dependency.ModuleName)}"
         }
         $i++
     }
@@ -2088,6 +2110,7 @@ function Get-M365DSCExportContentForResource
 
     if ($partialContent.ToLower().IndexOf($OrganizationName.ToLower()) -gt 0)
     {
+        $partialContent = $partialContent -ireplace [regex]::Escape($OrganizationName+":"), "`$($OrganizationName):"
         $partialContent = $partialContent -ireplace [regex]::Escape($OrganizationName), "`$OrganizationName"
         $partialContent = $partialContent -ireplace [regex]::Escape("@" + $OrganizationName), "@`$OrganizationName"
     }
@@ -2125,6 +2148,8 @@ function Test-M365DSCNewVersionAvailable
     catch
     {
         Write-Verbose -Message $_
+        Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+            -EventID 1 -Source $($MyInvocation.MyCommand.Source)
     }
 }
 
@@ -2133,40 +2158,65 @@ function Get-M365DSCComponentsForAuthenticationType
     [CmdletBinding()]
     [OutputType([System.String[]])]
     param(
-        [Parameter(Mandatory = $true)]
-        [System.String]
+        [Parameter()]
+        [System.String[]]
         [ValidateSet('Application', 'Certificate', 'Credentials')]
         $AuthenticationMethod
     )
 
-    $modules = Get-ChildItem ".\..\DSCResources" -Recurse -Filter '*.psm1'
+    $modules = Get-ChildItem -Path ($PSScriptRoot + "\..\DSCResources\") -Recurse -Filter '*.psm1'
     $Components = @()
     foreach ($resource in $modules)
     {
         Import-Module $resource.FullName -Force
         $parameters = (Get-command 'Set-TargetResource').Parameters.Keys
 
-        switch ($AuthenticationMethod)
+        # Case - Resource only supports AppID & GlobalAdmin
+        if ($AuthenticationMethod.Contains("Application") -and `
+            $AuthenticationMethod.Contains("Credentials") -and `
+           ($parameters.Contains("ApplicationId") -and `
+            $parameters.Contains("GlobalAdminAccount") -and `
+            -not $parameters.Contains('CertificateThumbprint') -and `
+            -not $parameters.Contains('CertificatePath') -and `
+            -not $parameters.Contains('CertificatePassword') -and `
+            -not $parameters.Contains('TenantId')))
         {
-            'Application' {
-                if ($parameters.Contains("ApplicationId") -and -not $parameters.Contains('CertificateThumbprint'))
-                {
-                    $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
-                }
-            }
-            'Certificate' {
-                if ($parameters.Contains('CertificateThumbprint'))
-                {
-                    $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
-                }
-            }
-            'Credentials' {
-                if (-not $parameters.Contains("ApplicationId") -and -not $parameters.Contains('CertificateThumbprint'))
-                {
-                    $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
-                }
-            }
+            $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
+        }
+
+        #Case - Resource certificate info and TenantId
+        elseif ($AuthenticationMethod.Contains("Certificate") -and `
+            ($parameters.Contains('CertificateThumbprint') -or `
+            $parameters.Contains('CertificatePath') -or `
+            $parameters.Contains('CertificatePassword')) -and `
+            $parameters.Contains('TenantId'))
+        {
+            $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
+        }
+
+        # Case - Resource contains GlobalAdminAccount
+        elseif ($AuthenticationMethod.Contains("Credentials") -and `
+            $parameters.Contains('GlobalAdminAccount'))
+        {
+            $Components += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
         }
     }
     return $Components
+}
+
+function Get-M365DSCAllResources
+{
+    [CmdletBinding()]
+    [OutputType([System.String[]])]
+    [CmdletBinding()]
+    param ()
+
+    $allResources = Get-ChildItem -Path ($PSScriptRoot + "\..\DSCResources\") -Recurse -Filter '*.psm1'
+    $result = @()
+    foreach ($resource in $allResources)
+    {
+        $result += $resource.Name.Replace("MSFT_", "").Replace(".psm1", "")
+    }
+
+    return $result
 }

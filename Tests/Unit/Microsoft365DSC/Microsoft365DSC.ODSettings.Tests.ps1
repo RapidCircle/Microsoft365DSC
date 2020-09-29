@@ -47,6 +47,7 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                 $testParams = @{
                     OneDriveStorageQuota = 1024
                     IsSingleInstance     = "Yes"
+                    Ensure               = "Present"
                     GlobalAdminAccount   = $GlobalAdminAccount
                 }
 
@@ -81,7 +82,7 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                     ODBAccessRequests                         = "On"
                     BlockMacSync                              = $true
                     DisableReportProblemDialog                = $true
-                    DomainGuids                               = (New-Guid).ToString()
+                    DomainGuids                               = @(New-Guid)
                     ExcludedFileExtensions                    = @(".asmx")
                     GrooveBlockOption                         = "HardOptIn"
                     GlobalAdminAccount                        = $GlobalAdminAccount
@@ -103,6 +104,9 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                         TenantRestrictionEnabled   = $true
                         ExcludedFileExtensions     = @(".asmx")
                     }
+                }
+                Mock -CommandName Set-PnPTenant -MockWith {
+                    return @{OneDriveStorageQuota = $null }
                 }
             }
 

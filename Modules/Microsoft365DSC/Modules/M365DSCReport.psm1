@@ -156,6 +156,8 @@ function New-M365DSCConfigurationToExcel
                 catch
                 {
                     Write-Verbose -Message $_
+                    Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+                        -EventID 1 -Source $($MyInvocation.MyCommand.Source)
                 }
 
                 if ($property -in @("Identity", "Name", "IsSingleInstance"))
@@ -500,7 +502,11 @@ function New-M365DSCDeltaReport
 
         [Parameter()]
         [System.Boolean]
-        $IsBlueprintAssessment = $false
+        $IsBlueprintAssessment = $false,
+
+        [Parameter()]
+        [System.String]
+        $HeaderFilePath
     )
 
     #region Telemetry
@@ -513,6 +519,23 @@ function New-M365DSCDeltaReport
     $Delta = Compare-M365DSCConfigurations -Source $Source -Destination $Destination -CaptureTelemetry $false
 
     $reportSB = [System.Text.StringBuilder]::new()
+    #region Custom Header
+    if (-not [System.String]::IsNullOrEmpty($HeaderFilePath))
+    {
+        try
+        {
+            $headerContent = Get-Content $HeaderFilePath
+            [void]$reportSB.AppendLine($headerContent)
+        }
+        catch
+        {
+            Write-Verbose -Message $_
+            Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+                -EventID 1 -Source $($MyInvocation.MyCommand.Source)
+        }
+    }
+    #endregion
+
     $ReportTitle = "Microsoft365DSC - Delta Report"
     if ($IsBlueprintAssessment)
     {
@@ -538,7 +561,7 @@ function New-M365DSCDeltaReport
     if ($resourcesMissingInSource.Count -eq 0 -and $resourcesMissingInDestination.Count -eq 0 -and `
         $resourcesInDrift.Count -eq 0)
     {
-        [void]$reportSB.AppendLine("<p><strong>No discrepencies have been found!</strong></p>")
+        [void]$reportSB.AppendLine("<p><strong>No discrepancies have been found!</strong></p>")
     }
     elseif (-not $DriftOnly)
     {

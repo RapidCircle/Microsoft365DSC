@@ -165,10 +165,6 @@ function Get-TargetResource
         $EncryptionRightsUrl,
 
         [Parameter()]
-        [System.String]
-        $EncryptionTemplateId,
-
-        [Parameter()]
         [System.Boolean]
         $SiteAndGroupProtectionAllowAccessToGuestUsers,
 
@@ -223,93 +219,107 @@ function Get-TargetResource
         $ConnectionMode = New-M365DSCConnection -Platform 'SecurityComplianceCenter' `
             -InboundParameters $PSBoundParameters
     }
+    $nullReturn = $PSBoundParameters
+    $nullReturn.Ensure = 'Absent'
 
     try
     {
-        $label = Get-Label -Identity $Name -ErrorAction SilentlyContinue -IncludeDetailedLabelActions $true
+        try
+        {
+            $label = Get-Label -Identity $Name -ErrorAction SilentlyContinue `
+                -IncludeDetailedLabelActions $true
+        }
+        catch
+        {
+            throw $_
+        }
+
+        if ($null -eq $label)
+        {
+            Write-Verbose -Message "Sensitivity label $($Name) does not exist."
+            return $nullReturn
+        }
+        else
+        {
+            $parentLabelID = $null
+            if ($null -ne $label.ParentId)
+            {
+                $parentLabel = Get-Label -Identity $label.ParentId -ErrorAction SilentlyContinue
+                $parentLabelID = $parentLabel.Name
+            }
+            if ($null -ne $label.LocaleSettings)
+            {
+                $localeSettingsValue = Convert-JSONToLocaleSettings -JSONLocalSettings $label.LocaleSettings
+            }
+            if ($null -ne $label.Settings)
+            {
+                $advancedSettingsValue = Convert-StringToAdvancedSettings -AdvancedSettings $label.Settings
+            }
+            if($null -ne $label.EncryptionRightsDefinitions)
+            {
+                $EncryptionRightsDefinitionsValue = Convert-EncryptionRightDefinition -RightsDefinition $label.EncryptionRightsDefinitions
+            }
+            Write-Verbose "Found existing Sensitivity Label $($Name)"
+            $result = @{
+                Name                                           = $label.Name
+                Comment                                        = $label.Comment
+                ParentId                                       = $parentLabelID
+                AdvancedSettings                               = $advancedSettingsValue
+                DisplayName                                    = $label.DisplayName
+                LocaleSettings                                 = $localeSettingsValue
+                Priority                                       = $label.Priority
+                Tooltip                                        = $label.Tooltip
+                Disabled                                       = $label.Disabled
+                GlobalAdminAccount                             = $GlobalAdminAccount
+                Ensure                                         = 'Present'
+                ApplyContentMarkingFooterAlignment             = $label.ApplyContentMarkingFooterAlignment
+                ApplyContentMarkingFooterEnabled               = $label.ApplyContentMarkingFooterEnabled
+                ApplyContentMarkingFooterFontColor             = $label.ApplyContentMarkingFooterFontColor
+                ApplyContentMarkingFooterFontName              = $label.ApplyContentMarkingFooterFontName
+                ApplyContentMarkingFooterFontSize              = $label.ApplyContentMarkingFooterFontSize
+                ApplyContentMarkingFooterMargin                = $label.ApplyContentMarkingFooterMargin
+                ApplyContentMarkingFooterText                  = $label.ApplyContentMarkingFooterText
+                ApplyContentMarkingHeaderAlignment             = $label.ApplyContentMarkingHeaderAlignment
+                ApplyContentMarkingHeaderEnabled               = $label.ApplyContentMarkingHeaderEnabled
+                ApplyContentMarkingHeaderFontColor             = $label.ApplyContentMarkingHeaderFontColor
+                ApplyContentMarkingHeaderFontName              = $label.ApplyContentMarkingHeaderFontName
+                ApplyContentMarkingHeaderFontSize              = $label.ApplyContentMarkingHeaderFontSize
+                ApplyContentMarkingHeaderMargin                = $label.ApplyContentMarkingHeaderMargin
+                ApplyContentMarkingHeaderText                  = $label.ApplyContentMarkingHeaderText
+                ApplyWaterMarkingEnabled                       = $label.ApplyWaterMarkingEnabled
+                ApplyWaterMarkingFontColor                     = $label.ApplyWaterMarkingFontColor
+                ApplyWaterMarkingFontName                      = $label.ApplyWaterMarkingFontName
+                ApplyWaterMarkingFontSize                      = $label.ApplyWaterMarkingFontSize
+                ApplyWaterMarkingLayout                        = $label.ApplyWaterMarkingLayout
+                ApplyWaterMarkingText                          = $label.ApplyWaterMarkingText
+                EncryptionAipTemplateScopes                    = $label.EncryptionAipTemplateScopes
+                EncryptionContentExpiredOnDateInDaysOrNever    = $label.EncryptionContentExpiredOnDateInDaysOrNever
+                EncryptionDoNotForward                         = $label.EncryptionDoNotForward
+                EncryptionEnabled                              = $label.EncryptionEnabled
+                EncryptionOfflineAccessDays                    = $label.EncryptionOfflineAccessDays
+                EncryptionPromptUser                           = $label.EncryptionPromptUser
+                EncryptionProtectionType                       = $label.EncryptionProtectionType
+                EncryptionRightsDefinitions                    = $EncryptionRightsDefinitionsValue
+                EncryptionRightsUrl                            = $label.EncryptionRightsUrl
+                SiteAndGroupProtectionAllowAccessToGuestUsers  = $label.SiteAndGroupProtectionAllowAccessToGuestUsers
+                SiteAndGroupProtectionAllowEmailFromGuestUsers = $label.SiteAndGroupProtectionAllowEmailFromGuestUsers
+                SiteAndGroupProtectionAllowFullAccess          = $label.SiteAndGroupProtectionAllowFullAccess
+                SiteAndGroupProtectionAllowLimitedAccess       = $label.SiteAndGroupProtectionAllowLimitedAccess
+                SiteAndGroupProtectionBlockAccess              = $label.SiteAndGroupProtectionBlockAccess
+                SiteAndGroupProtectionEnabled                  = $label.SiteAndGroupProtectionEnabled
+                SiteAndGroupProtectionPrivacy                  = $label.SiteAndGroupProtectionPrivacy
+            }
+
+            Write-Verbose -Message "Get-TargetResource Result: `n $(Convert-M365DscHashtableToString -Hashtable $result)"
+            return $result
+        }
     }
     catch
     {
-        throw $_
-    }
-
-    if ($null -eq $label)
-    {
-        Write-Verbose -Message "Sensitivity label $($Name) does not exist."
-        $result = $PSBoundParameters
-        $result.Ensure = 'Absent'
-        return $result
-    }
-    else
-    {
-        $parentLabelID = $null
-        if ($null -ne $label.ParentId)
-        {
-            $parentLabel = Get-Label -Identity $label.ParentId -ErrorAction SilentlyContinue
-            $parentLabelID = $parentLabel.Name
-        }
-        if ($null -ne $label.LocaleSettings)
-        {
-            $localeSettingsValue = Convert-JSONToLocaleSettings -JSONLocalSettings $label.LocaleSettings
-        }
-        if ($null -ne $label.Settings)
-        {
-            $advancedSettingsValue = Convert-StringToAdvancedSettings -AdvancedSettings $label.Settings
-        }
-        Write-Verbose "Found existing Sensitivity Label $($Name)"
-        $result = @{
-            Name                                           = $label.Name
-            Comment                                        = $label.Comment
-            ParentId                                       = $parentLabelID
-            AdvancedSettings                               = $advancedSettingsValue
-            DisplayName                                    = $label.DisplayName
-            LocaleSettings                                 = $localeSettingsValue
-            Priority                                       = $label.Priority
-            Tooltip                                        = $label.Tooltip
-            Disabled                                       = $label.Disabled
-            GlobalAdminAccount                             = $GlobalAdminAccount
-            Ensure                                         = 'Present'
-            ApplyContentMarkingFooterAlignment             = $label.ApplyContentMarkingFooterAlignment
-            ApplyContentMarkingFooterEnabled               = $label.ApplyContentMarkingFooterEnabled
-            ApplyContentMarkingFooterFontColor             = $label.ApplyContentMarkingFooterFontColor
-            ApplyContentMarkingFooterFontName              = $label.ApplyContentMarkingFooterFontName
-            ApplyContentMarkingFooterFontSize              = $label.ApplyContentMarkingFooterFontSize
-            ApplyContentMarkingFooterMargin                = $label.ApplyContentMarkingFooterMargin
-            ApplyContentMarkingFooterText                  = $label.ApplyContentMarkingFooterText
-            ApplyContentMarkingHeaderAlignment             = $label.ApplyContentMarkingHeaderAlignment
-            ApplyContentMarkingHeaderEnabled               = $label.ApplyContentMarkingHeaderEnabled
-            ApplyContentMarkingHeaderFontColor             = $label.ApplyContentMarkingHeaderFontColor
-            ApplyContentMarkingHeaderFontName              = $label.ApplyContentMarkingHeaderFontName
-            ApplyContentMarkingHeaderFontSize              = $label.ApplyContentMarkingHeaderFontSize
-            ApplyContentMarkingHeaderMargin                = $label.ApplyContentMarkingHeaderMargin
-            ApplyContentMarkingHeaderText                  = $label.ApplyContentMarkingHeaderText
-            ApplyWaterMarkingEnabled                       = $label.ApplyWaterMarkingEnabled
-            ApplyWaterMarkingFontColor                     = $label.ApplyWaterMarkingFontColor
-            ApplyWaterMarkingFontName                      = $label.ApplyWaterMarkingFontName
-            ApplyWaterMarkingFontSize                      = $label.ApplyWaterMarkingFontSize
-            ApplyWaterMarkingLayout                        = $label.ApplyWaterMarkingLayout
-            ApplyWaterMarkingText                          = $label.ApplyWaterMarkingText
-            EncryptionAipTemplateScopes                    = $label.EncryptionAipTemplateScopes
-            EncryptionContentExpiredOnDateInDaysOrNever    = $label.EncryptionContentExpiredOnDateInDaysOrNever
-            EncryptionDoNotForward                         = $label.EncryptionDoNotForward
-            EncryptionEnabled                              = $label.EncryptionEnabled
-            EncryptionOfflineAccessDays                    = $label.EncryptionOfflineAccessDays
-            EncryptionPromptUser                           = $label.EncryptionPromptUser
-            EncryptionProtectionType                       = $label.EncryptionProtectionType
-            EncryptionRightsDefinitions                    = $label.EncryptionRightsDefinitions
-            EncryptionRightsUrl                            = $label.EncryptionRightsUrl
-            EncryptionTemplateId                           = $label.EncryptionTemplateId
-            SiteAndGroupProtectionAllowAccessToGuestUsers  = $label.SiteAndGroupProtectionAllowAccessToGuestUsers
-            SiteAndGroupProtectionAllowEmailFromGuestUsers = $label.SiteAndGroupProtectionAllowEmailFromGuestUsers
-            SiteAndGroupProtectionAllowFullAccess          = $label.SiteAndGroupProtectionAllowFullAccess
-            SiteAndGroupProtectionAllowLimitedAccess       = $label.SiteAndGroupProtectionAllowLimitedAccess
-            SiteAndGroupProtectionBlockAccess              = $label.SiteAndGroupProtectionBlockAccess
-            SiteAndGroupProtectionEnabled                  = $label.SiteAndGroupProtectionEnabled
-            SiteAndGroupProtectionPrivacy                  = $label.SiteAndGroupProtectionPrivacy
-        }
-
-        Write-Verbose -Message "Get-TargetResource Result: `n $(Convert-M365DscHashtableToString -Hashtable $result)"
-        return $result
+        Write-Verbose -Message $_
+        Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+            -EventID 1 -Source $($MyInvocation.MyCommand.Source)
+        return $nullReturn
     }
 }
 
@@ -478,9 +488,6 @@ function Set-TargetResource
         [System.String]
         $EncryptionRightsUrl,
 
-        [Parameter()]
-        [System.String]
-        $EncryptionTemplateId,
 
         [Parameter()]
         [System.Boolean]
@@ -790,10 +797,6 @@ function Test-TargetResource
         $EncryptionRightsUrl,
 
         [Parameter()]
-        [System.String]
-        $EncryptionTemplateId,
-
-        [Parameter()]
         [System.Boolean]
         $SiteAndGroupProtectionAllowAccessToGuestUsers,
 
@@ -858,7 +861,7 @@ function Test-TargetResource
         }
     }
 
-    $TestResult = Test-Microsoft365DSCParameterState -CurrentValues $CurrentValues `
+    $TestResult = Test-M365DSCParameterState -CurrentValues $CurrentValues `
         -Source $($MyInvocation.MyCommand.Source) `
         -DesiredValues $PSBoundParameters `
         -ValuesToCheck $ValuesToCheck.Keys
@@ -892,7 +895,7 @@ function Export-TargetResource
 
     try
     {
-        [array]$labels = Get-Label
+        [array]$labels = Get-Label -ErrorAction Stop
 
         $dscContent = ""
         $i = 1
@@ -939,7 +942,10 @@ function Export-TargetResource
     }
     catch
     {
-        Write-Warning "Get-Label is not available in tenant $($GlobalAdminAccount.UserName.Split('@')[0])"
+        Write-Verbose -Message $_
+        Add-M365DSCEvent -Message $_ -EntryType 'Error' `
+            -EventID 1 -Source $($MyInvocation.MyCommand.Source)
+        return ""
     }
     return $dscContent
 }
@@ -1033,6 +1039,28 @@ function Convert-CIMToAdvancedSettings
     return $entry
 }
 
+function Convert-EncryptionRightDefinition
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    Param(
+        [parameter(Mandatory = $true)]
+        [System.String]
+        $RightsDefinition
+    )
+
+    $EncryptionRights = $RightsDefinition | ConvertFrom-Json
+    foreach ($right in $EncryptionRights)
+    {
+        $StringContent += "$($right.Identity):$($right.Rights);"
+    }
+    if ($StringContent.EndsWith(";"))
+    {
+        $StringContent = $StringContent.Substring(0,($StringContent.Length-1))
+    }
+    return $StringContent
+
+}
 
 function Convert-CIMToLocaleSettings
 {

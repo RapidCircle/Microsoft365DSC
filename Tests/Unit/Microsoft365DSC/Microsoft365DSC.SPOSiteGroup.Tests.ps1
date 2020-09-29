@@ -29,12 +29,22 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                 return @{}
             }
 
+            Mock -CommandName Set-PnPGroupPermissions -MockWith {
+
+            }
+
             Mock -CommandName Get-M365DSCExportContentForResource -MockWith {
 
             }
 
             Mock -CommandName New-M365DSCConnection -MockWith {
                 return "Credential"
+            }
+
+            Mock -CommandName Get-PnPTenantSite -MockWith {
+                return @{
+                    URL = "https://contoso.sharepoint.com/sites/TestSite"
+                }
             }
         }
         # Test contexts
@@ -54,10 +64,6 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                 }
 
                 Mock -CommandName Get-PnPTenantSite -MockWith {
-                    return $null
-                }
-
-                Mock -CommandName Get-PnPGroup -MockWith {
                     return $null
                 }
 
